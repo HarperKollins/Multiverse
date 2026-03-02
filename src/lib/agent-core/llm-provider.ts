@@ -21,8 +21,11 @@ export class WebLLMProvider implements ILLMProvider {
     name = 'WebGPU (Local)';
     isLoaded = false;
     private engine: any = null;
-    // Default model to use (small enough for most dedicated/integrated GPUs)
-    private modelId = 'Llama-3-8B-Instruct-q4f16_1-MLC';
+    private modelId: string;
+
+    constructor(modelId: string = 'gemma-2b-it-q4f16_1-MLC') {
+        this.modelId = modelId;
+    }
 
     async initialize(onProgress?: (text: string) => void): Promise<void> {
         if (this.isLoaded) return;
@@ -86,9 +89,10 @@ export class OllamaProvider implements ILLMProvider {
     name = 'Ollama (Localhost)';
     isLoaded = true; // Doesn't need massive client-side loading
     private ollama: Ollama;
-    private modelName = 'llama3'; // Configurable later
+    private modelName: string;
 
-    constructor(host = 'http://localhost:11434') {
+    constructor(modelName: string = 'llama3', host = 'http://localhost:11434') {
+        this.modelName = modelName;
         this.ollama = new Ollama({ host });
     }
 
