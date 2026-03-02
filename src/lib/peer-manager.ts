@@ -19,7 +19,7 @@ function generatePeerId(): string {
 
 function generatePeerName(): string {
     const adjectives = ['Swift', 'Silent', 'Bright', 'Deep', 'Cosmic', 'Quantum', 'Neural', 'Shadow'];
-    const nouns = ['Node', 'Nexus', 'Core', 'Spark', 'Wave', 'Pulse', 'Link', 'Vertex'];
+    const nouns = ['Node', 'Jupiter', 'Core', 'Spark', 'Wave', 'Pulse', 'Link', 'Vertex'];
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
     return `${adj}${noun}`;

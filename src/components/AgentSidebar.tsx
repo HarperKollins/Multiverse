@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import type { AgentMessage } from '../lib/types';
-import { generateAgentResponse } from '../lib/knowledge';
 import { seedSampleKnowledge, getKnowledgeCount } from '../lib/database';
 import { peerManager } from '../lib/peer-manager';
+import { runtime } from '../lib/agent-core/runtime';
+import { ModelSettings } from './Settings/ModelSettings';
 import KnowledgeCard from './KnowledgeCard';
 import './AgentSidebar.css';
 
@@ -17,12 +18,13 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
         {
             id: 'welcome',
             role: 'system',
-            content: `Nexus online. ${getKnowledgeCount()} knowledge entries loaded. Ask me anything — I'll search your local knowledge first.`,
+            content: `Jupiter online. ${getKnowledgeCount()} knowledge entries loaded. Ask me anything — I'll search your local knowledge first.`,
             timestamp: Date.now(),
         },
     ]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [pendingMeshQueries, setPendingMeshQueries] = useState<Set<string>>(new Set());
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -63,7 +65,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
         return unsub;
     }, [pendingMeshQueries]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || isThinking) return;
 
@@ -79,29 +81,64 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
         };
         setMessages((prev) => [...prev, userMsg]);
 
-        // Simulate thinking
         setIsThinking(true);
-        setTimeout(() => {
-            // Local check
-            const { response, results } = generateAgentResponse(query);
 
-            const agentMsg: AgentMessage = {
-                id: `agent-${Date.now()}`,
-                role: 'agent',
-                content: response,
-                timestamp: Date.now(),
-                knowledgeResults: results,
-            };
+        try {
+            if (!runtime.isReady()) {
+                setMessages((prev) => [...prev, {
+                    id: `sys-${Date.now()}`,
+                    role: 'system',
+                    content: 'LLM Engine is not ready. Please click the gear icon in my header to configure Jupiter.',
+                    timestamp: Date.now(),
+                }]);
+                setIsThinking(false);
+                return;
+            }
 
-            setMessages((prev) => [...prev, agentMsg]);
-            setIsThinking(false);
-
-            // Ask the mesh
+            // Ask the mesh synchronously so it broadcasts
             if (peerManager.getState().isOnline && peerManager.getState().peers.some(p => p.isOnline)) {
                 const meshQueryId = peerManager.askMesh(query);
                 setPendingMeshQueries((prev) => new Set(prev).add(meshQueryId));
             }
-        }, 600 + Math.random() * 800);
+
+            const agentMsgId = `agent-${Date.now()}`;
+            let streamedResponse = '';
+
+            const fullResponse = await runtime.ask(query, (text) => {
+                streamedResponse = text;
+                setMessages((prev) => {
+                    const existing = prev.find(m => m.id === agentMsgId);
+                    if (existing) {
+                        return prev.map(m => m.id === agentMsgId ? { ...m, content: text } : m);
+                    } else {
+                        return [...prev, {
+                            id: agentMsgId,
+                            role: 'agent',
+                            content: text,
+                            timestamp: Date.now()
+                        }];
+                    }
+                });
+            });
+
+            if (!streamedResponse) {
+                setMessages((prev) => [...prev, {
+                    id: agentMsgId,
+                    role: 'agent',
+                    content: fullResponse,
+                    timestamp: Date.now(),
+                }]);
+            }
+        } catch (error: any) {
+            setMessages((prev) => [...prev, {
+                id: `sys-${Date.now()}`,
+                role: 'system',
+                content: `Error thinking: ${error.message}`,
+                timestamp: Date.now(),
+            }]);
+        } finally {
+            setIsThinking(false);
+        }
     };
 
     return (
@@ -110,7 +147,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
             <button
                 className={`sidebar-toggle ${isOpen ? 'open' : ''}`}
                 onClick={onToggle}
-                title={isOpen ? 'Close Nexus' : 'Open Nexus'}
+                title={isOpen ? 'Close Jupiter' : 'Open Jupiter'}
             >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <circle cx="8" cy="8" r="6" stroke="var(--accent-primary)" strokeWidth="1.2" opacity="0.6" />
@@ -130,11 +167,21 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
                             </svg>
                         </div>
                         <div>
-                            <span className="as-title">NEXUS</span>
-                            <span className="as-subtitle mono">Agent Online</span>
+                            <span className="as-title">JUPITER</span>
+                            <span className="as-subtitle mono" style={{ opacity: runtime.isReady() ? 1 : 0.6 }}>
+                                {runtime.getProviderName()}
+                            </span>
                         </div>
                     </div>
-                    <button className="as-close" onClick={onToggle}>✕</button>
+                    <div>
+                        <button className="as-close" onClick={() => setShowSettings(true)} title="Settings" style={{ marginRight: '8px' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </button>
+                        <button className="as-close" onClick={onToggle}>✕</button>
+                    </div>
                 </div>
 
                 <div className="as-messages">
@@ -161,6 +208,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
                     </button>
                 </form>
             </aside>
+            <ModelSettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
         </>
     );
 }
@@ -174,7 +222,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
         <div className={`msg-bubble ${isUser ? 'msg-user' : isSystem ? 'msg-system' : isPeer ? 'msg-peer' : 'msg-agent'}`}>
             {!isUser && (
                 <span className="msg-label mono">
-                    {isSystem ? 'SYSTEM' : isPeer ? message.peerName : 'NEXUS'}
+                    {isSystem ? 'SYSTEM' : isPeer ? message.peerName : 'JUPITER'}
                 </span>
             )}
             <div className="msg-content">
@@ -206,7 +254,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 function ThinkingIndicator() {
     return (
         <div className="msg-bubble msg-agent">
-            <span className="msg-label mono">NEXUS</span>
+            <span className="msg-label mono">JUPITER</span>
             <div className="thinking-dots">
                 <span className="dot" />
                 <span className="dot" />

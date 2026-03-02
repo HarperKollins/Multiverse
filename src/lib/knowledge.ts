@@ -1,7 +1,7 @@
 // ── Multiverse Knowledge Manager ──
 // Keyword-based search with TF-IDF scoring (no GPU needed)
 
-import type { KnowledgeEntry, SearchResult } from './types';
+import type { SearchResult } from './types';
 import { getAllKnowledge, updateKnowledgeAccess } from './database';
 
 /** Tokenize text into lowercase words */
