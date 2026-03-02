@@ -14,6 +14,58 @@ The core vision of Multiverse is to create a local-first web environment where A
 
 The system is rigorously structured into five well-defined layers with clean boundaries. Each layer communicates exclusively with its immediate neighbors via typed interfaces, preventing architectural decay and ensuring horizontal scalability.
 
+```mermaid
+graph TD
+    classDef layer5 fill:#1E293B,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC
+    classDef layer4 fill:#312E81,stroke:#8B5CF6,stroke-width:2px,color:#F8FAFC
+    classDef layer3 fill:#064E3B,stroke:#10B981,stroke-width:2px,color:#F8FAFC
+    classDef layer2 fill:#78350F,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC
+    classDef layer1 fill:#450A0A,stroke:#EF4444,stroke-width:2px,color:#F8FAFC
+    classDef external fill:#000000,stroke:#64748B,stroke-dasharray: 5 5,color:#94A3B8
+
+    subgraph Layer5["Layer 5: Browser Shell"]
+        UI["Modern React/Tauri Desktop Shell"]:::layer5
+        SB["Jupiter Agent Sidebar UI"]:::layer5
+    end
+
+    subgraph Layer4["Layer 4: Agent Core ('Jupiter')"]
+        IR["Intent Router & Orchestrator"]:::layer4
+        TR["Tool Registry"]:::layer4
+        EE["Execution Engine (WebGPU/Ollama/API)"]:::layer4
+    end
+
+    subgraph Layer3["Layer 3: Mesh Layer"]
+        BC["Zero-Config BroadcastChannel Peer Topology"]:::layer3
+        GS["Agent Gossip Protocol"]:::layer3
+    end
+
+    subgraph Layer2["Layer 2: Data Layer"]
+        DB[("SQLite FTS5 (Local Knowledge Graph)")]:::layer2
+        VS[("Vector Store (Semantic Context)")]:::layer2
+    end
+
+    subgraph Layer1["Layer 1: Privacy Engine"]
+        PE["Absolute Local Data Sovereignty"]:::layer1
+    end
+
+    Peers["Other Connected Agents"]:::external
+
+    UI <--> SB
+    SB <--> IR
+    IR <--> TR
+    IR <--> EE
+    
+    IR <--> BC
+    BC <--> GS
+    GS <--> Peers
+    
+    TR <--> DB
+    TR <--> VS
+    
+    DB <--> PE
+    VS <--> PE
+```
+
 ### 1. Privacy Engine (Layer 1)
 The foundational layer guaranteeing data sovereignty. All persistent memory and vector embeddings reside strictly on the user's local disk. No telemetry, no forced cloud synchronization. 
 
