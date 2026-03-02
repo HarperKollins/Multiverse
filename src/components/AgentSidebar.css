@@ -132,9 +132,17 @@
 }
 
 .msg-agent,
-.msg-system {
+.msg-system,
+.msg-peer {
     align-self: flex-start;
     max-width: 95%;
+}
+
+.msg-peer {
+    background: rgba(79, 209, 197, 0.05);
+    border: 1px dashed var(--accent-primary);
+    border-radius: var(--radius-md) var(--radius-md) var(--radius-md) var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
 }
 
 .msg-label {
@@ -148,6 +156,10 @@
 
 .msg-system .msg-label {
     color: var(--text-muted);
+}
+
+.msg-peer .msg-label {
+    color: var(--status-online);
 }
 
 .msg-content {

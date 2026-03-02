@@ -28,10 +28,11 @@ export interface SearchResult {
 
 export interface AgentMessage {
     id: string;
-    role: 'user' | 'agent' | 'system';
+    role: 'user' | 'agent' | 'system' | 'peer';
     content: string;
     timestamp: number;
     knowledgeResults?: SearchResult[];
+    peerName?: string;
     isThinking?: boolean;
 }
 

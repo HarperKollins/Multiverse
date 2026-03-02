@@ -1,4 +1,5 @@
 import { useState } from "react";
+import TopologyView from "./TopologyView";
 import "./Dashboard.css";
 
 const tabs = ["Overview", "Topology", "Memory Heap", "Logs"];
@@ -210,63 +211,81 @@ export default function Dashboard() {
 
             {/* Content */}
             <div className="dashboard-content">
-                {/* Stats Row */}
-                <div className="stats-row">
-                    {stats.map((stat) => (
-                        <div key={stat.label} className="stat-card">
-                            <div className="stat-header">
-                                <span className="stat-label mono">{stat.label}</span>
-                                <span className="stat-icon">{getIcon(stat.icon)}</span>
-                            </div>
-                            <div className="stat-body">
-                                <span className="stat-value">{stat.value}</span>
-                                {stat.unit && <span className="stat-unit">{stat.unit}</span>}
-                                {stat.sublabel && <span className="stat-sublabel mono">{stat.sublabel}</span>}
-                                {stat.change && (
-                                    <span className={`stat-change ${stat.changePositive ? "positive" : "negative"}`}>
-                                        {stat.change}
-                                    </span>
-                                )}
-                            </div>
-                            {stat.label === "SYSTEM LOAD" && (
-                                <div className="stat-progress">
-                                    <div className="progress-bar" style={{ width: "14%" }} />
+                {activeTab === "Overview" && (
+                    <>
+                        {/* Stats Row */}
+                        <div className="stats-row">
+                            {stats.map((stat) => (
+                                <div key={stat.label} className="stat-card">
+                                    <div className="stat-header">
+                                        <span className="stat-label mono">{stat.label}</span>
+                                        <span className="stat-icon">{getIcon(stat.icon)}</span>
+                                    </div>
+                                    <div className="stat-body">
+                                        <span className="stat-value">{stat.value}</span>
+                                        {stat.unit && <span className="stat-unit">{stat.unit}</span>}
+                                        {stat.sublabel && <span className="stat-sublabel mono">{stat.sublabel}</span>}
+                                        {stat.change && (
+                                            <span className={`stat-change ${stat.changePositive ? "positive" : "negative"}`}>
+                                                {stat.change}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {stat.label === "SYSTEM LOAD" && (
+                                        <div className="stat-progress">
+                                            <div className="progress-bar" style={{ width: "14%" }} />
+                                        </div>
+                                    )}
                                 </div>
-                            )}
+                            ))}
                         </div>
-                    ))}
-                </div>
 
-                {/* Charts Row */}
-                <div className="charts-row">
-                    <div className="chart-card">
-                        <div className="chart-header">
-                            <div>
-                                <span className="chart-title">Neural Flux</span>
-                                <span className="chart-subtitle">I/O Throughput</span>
+                        {/* Charts Row */}
+                        <div className="charts-row">
+                            <div className="chart-card">
+                                <div className="chart-header">
+                                    <div>
+                                        <span className="chart-title">Neural Flux</span>
+                                        <span className="chart-subtitle">I/O Throughput</span>
+                                    </div>
+                                    <div className="chart-value">
+                                        <span className="value-number">94.2</span>
+                                        <span className="value-unit">TB</span>
+                                    </div>
+                                </div>
+                                <FluxChart />
                             </div>
-                            <div className="chart-value">
-                                <span className="value-number">94.2</span>
-                                <span className="value-unit">TB</span>
-                            </div>
-                        </div>
-                        <FluxChart />
-                    </div>
 
-                    <div className="chart-card">
-                        <div className="chart-header">
-                            <div>
-                                <span className="chart-title">Token Consumption</span>
-                                <span className="chart-subtitle">Burn Rate</span>
-                            </div>
-                            <div className="chart-value">
-                                <span className="value-number">4.2</span>
-                                <span className="value-unit">M</span>
+                            <div className="chart-card">
+                                <div className="chart-header">
+                                    <div>
+                                        <span className="chart-title">Token Consumption</span>
+                                        <span className="chart-subtitle">Burn Rate</span>
+                                    </div>
+                                    <div className="chart-value">
+                                        <span className="value-number">4.2</span>
+                                        <span className="value-unit">M</span>
+                                    </div>
+                                </div>
+                                <TokenChart />
                             </div>
                         </div>
-                        <TokenChart />
+                    </>
+                )}
+
+                {activeTab === "Topology" && <TopologyView />}
+
+                {activeTab === "Memory Heap" && (
+                    <div className="tab-placeholder">
+                        <span className="text-muted mono">Memory Heap — Coming in Sprint 4</span>
                     </div>
-                </div>
+                )}
+
+                {activeTab === "Logs" && (
+                    <div className="tab-placeholder">
+                        <span className="text-muted mono">Logs — Coming in Sprint 4</span>
+                    </div>
+                )}
             </div>
         </div>
     );

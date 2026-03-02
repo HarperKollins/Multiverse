@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { AgentMessage } from '../lib/types';
 import { generateAgentResponse } from '../lib/knowledge';
 import { seedSampleKnowledge, getKnowledgeCount } from '../lib/database';
+import { peerManager } from '../lib/peer-manager';
 import KnowledgeCard from './KnowledgeCard';
 import './AgentSidebar.css';
 
@@ -22,6 +23,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
     ]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
+    const [pendingMeshQueries, setPendingMeshQueries] = useState<Set<string>>(new Set());
     const bottomRef = useRef<HTMLDivElement>(null);
 
     // Seed sample data on mount
@@ -33,6 +35,33 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isThinking]);
+
+    // Listen for mesh answers
+    useEffect(() => {
+        const unsub = peerManager.subscribe((meshState) => {
+            setMessages((prev) => {
+                let updated = [...prev];
+                let changed = false;
+                for (const answer of meshState.answers) {
+                    if (pendingMeshQueries.has(answer.queryId)) {
+                        const msgId = `peer-${answer.queryId}-${answer.peerId}`;
+                        if (!updated.some((m) => m.id === msgId)) {
+                            updated.push({
+                                id: msgId,
+                                role: 'peer',
+                                peerName: answer.peerName,
+                                content: `**[Mesh Response]**\n\n${answer.answer}`,
+                                timestamp: Date.now(),
+                            });
+                            changed = true;
+                        }
+                    }
+                }
+                return changed ? updated : prev;
+            });
+        });
+        return unsub;
+    }, [pendingMeshQueries]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -53,6 +82,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
         // Simulate thinking
         setIsThinking(true);
         setTimeout(() => {
+            // Local check
             const { response, results } = generateAgentResponse(query);
 
             const agentMsg: AgentMessage = {
@@ -65,6 +95,12 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
 
             setMessages((prev) => [...prev, agentMsg]);
             setIsThinking(false);
+
+            // Ask the mesh
+            if (peerManager.getState().isOnline && peerManager.getState().peers.some(p => p.isOnline)) {
+                const meshQueryId = peerManager.askMesh(query);
+                setPendingMeshQueries((prev) => new Set(prev).add(meshQueryId));
+            }
         }, 600 + Math.random() * 800);
     };
 
@@ -132,12 +168,13 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
 function MessageBubble({ message }: { message: AgentMessage }) {
     const isUser = message.role === 'user';
     const isSystem = message.role === 'system';
+    const isPeer = message.role === 'peer';
 
     return (
-        <div className={`msg-bubble ${isUser ? 'msg-user' : isSystem ? 'msg-system' : 'msg-agent'}`}>
+        <div className={`msg-bubble ${isUser ? 'msg-user' : isSystem ? 'msg-system' : isPeer ? 'msg-peer' : 'msg-agent'}`}>
             {!isUser && (
                 <span className="msg-label mono">
-                    {isSystem ? 'SYSTEM' : 'NEXUS'}
+                    {isSystem ? 'SYSTEM' : isPeer ? message.peerName : 'NEXUS'}
                 </span>
             )}
             <div className="msg-content">

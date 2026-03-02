@@ -1,35 +1,60 @@
+import { useState, useEffect } from "react";
+import { peerManager } from "../lib/peer-manager";
+import type { MeshState } from "../lib/mesh-types";
+import { getKnowledgeCount } from "../lib/database";
 import "./StatusBar.css";
 
 export default function StatusBar() {
+    const [meshState, setMeshState] = useState<MeshState | null>(null);
+    const [knowledgeCount, setKnowledgeCount] = useState(0);
+
+    useEffect(() => {
+        const unsub = peerManager.subscribe(setMeshState);
+        setKnowledgeCount(getKnowledgeCount());
+
+        // Refresh knowledge count periodically
+        const interval = setInterval(() => {
+            setKnowledgeCount(getKnowledgeCount());
+        }, 5000);
+
+        return () => {
+            unsub();
+            clearInterval(interval);
+        };
+    }, []);
+
+    const onlinePeers = meshState?.peers.filter((p) => p.isOnline).length ?? 0;
+
     return (
         <footer className="statusbar">
             <div className="statusbar-left">
-                <span className="status-indicator">
-                    <span className="indicator-dot online" />
+                <span className="status-indicator online">
+                    <span className="status-dot"></span>
                     <span className="mono">SYSTEM ONLINE</span>
                 </span>
-                <span className="statusbar-divider" />
-                <span className="status-metric">
-                    <span className="metric-icon">⊕</span>
-                    <span className="mono">RAM: 32.4%</span>
+                <span className="status-divider">|</span>
+                <span className="status-metric mono">
+                    ⊚ RAM: 32.4%
                 </span>
             </div>
 
             <div className="statusbar-center">
-                <div className="center-dots">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                        <span key={i} className={`dot ${i === 2 ? "dot-active" : ""}`} />
-                    ))}
-                </div>
+                <span className="status-metric mono">
+                    📚 {knowledgeCount} entries
+                </span>
+                <span className="status-divider">•</span>
+                <span className={`status-metric mono ${onlinePeers > 0 ? 'text-accent' : ''}`}>
+                    🌐 {onlinePeers} {onlinePeers === 1 ? 'peer' : 'peers'}
+                </span>
             </div>
 
             <div className="statusbar-right">
                 <span className="status-metric mono">
-                    PEER MAP: <span className="text-accent">US_WEST_2</span>
+                    PEER MAP: <span className="text-accent">{meshState?.localPeerName ?? '...'}</span>
                 </span>
-                <span className="statusbar-divider" />
-                <span className="privacy-badge">
-                    <span className="privacy-dot" />
+                <span className="status-divider">|</span>
+                <span className="status-indicator privacy">
+                    <span className="status-dot" style={{ background: "var(--status-online)" }}></span>
                     <span className="mono">PRIVACY: 98%</span>
                 </span>
             </div>

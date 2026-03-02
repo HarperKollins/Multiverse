@@ -1,0 +1,271 @@
+/* ── Topology View ── */
+.topology {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+    animation: fade-in 0.5s ease forwards;
+}
+
+/* Stats Row */
+.topo-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg);
+}
+
+.topo-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    transition: border-color var(--transition-fast);
+}
+
+.topo-stat:hover {
+    border-color: var(--border-default);
+}
+
+.topo-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+}
+
+.topo-stat-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+}
+
+/* Content */
+.topo-content {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: var(--space-lg);
+}
+
+/* Network Viz */
+.topo-network {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    overflow: hidden;
+}
+
+.network-svg {
+    display: block;
+}
+
+/* Activity Feed */
+.topo-feed {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    max-height: 280px;
+}
+
+.feed-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+}
+
+.feed-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.feed-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xl) 0;
+    text-align: center;
+    font-size: 12px;
+}
+
+.feed-hint {
+    font-size: 11px;
+    color: var(--text-accent);
+    background: var(--accent-glow);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.feed-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 11px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    animation: fade-in 0.2s ease forwards;
+}
+
+.feed-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.feed-peer {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-accent);
+    flex-shrink: 0;
+    min-width: 70px;
+}
+
+.feed-detail {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.feed-time {
+    font-size: 9px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Peer Cards */
+.topo-peers {
+    padding-top: var(--space-sm);
+}
+
+.peer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-md);
+    margin-top: var(--space-sm);
+}
+
+.peer-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    transition: border-color var(--transition-fast);
+    animation: fade-in 0.3s ease forwards;
+}
+
+.peer-card:hover {
+    border-color: var(--border-default);
+}
+
+.pc-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.pc-avatar {
+    flex-shrink: 0;
+}
+
+.pc-name {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pc-id {
+    display: block;
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.pc-online-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--status-online);
+    margin-left: auto;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px var(--status-online);
+}
+
+.pc-stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.pc-stat {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.pc-stat-label {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    min-width: 65px;
+}
+
+.pc-stat-value {
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.pc-trust-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.pc-trust-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.pc-caps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.pc-cap {
+    font-size: 9px;
+    color: var(--accent-dim);
+    background: rgba(79, 209, 197, 0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border-subtle);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .topo-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .topo-content {
+        grid-template-columns: 1fr;
+    }
+}
