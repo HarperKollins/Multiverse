@@ -1,9 +1,36 @@
+import { useState } from "react";
 import "./CommandBar.css";
 
-export default function CommandBar() {
+interface Props {
+    onQuery?: (query: string) => void;
+}
+
+export default function CommandBar({ onQuery }: Props) {
+    const [value, setValue] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!value.trim()) return;
+
+        const input = value.trim();
+
+        // Check if it's a URL
+        const isUrl = /^https?:\/\//i.test(input) || /^[a-z0-9-]+\.[a-z]{2,}/i.test(input);
+
+        if (isUrl) {
+            // Future: navigate webview
+            console.log('[NAV]', input);
+        } else {
+            // Route to agent
+            onQuery?.(input);
+        }
+
+        setValue('');
+    };
+
     return (
         <div className="commandbar">
-            <div className="commandbar-inner">
+            <form className="commandbar-inner" onSubmit={handleSubmit}>
                 <div className="commandbar-icon">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                         <path d="M2 4L6 8L2 12" stroke="var(--accent-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -14,7 +41,9 @@ export default function CommandBar() {
                 <input
                     type="text"
                     className="commandbar-input mono"
-                    placeholder="query_sector_7"
+                    placeholder="Search knowledge or enter URL..."
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
                     spellCheck={false}
                 />
                 <div className="commandbar-actions">
@@ -24,7 +53,7 @@ export default function CommandBar() {
                     </span>
                     <span className="shortcut-badge mono">CMD+K</span>
                 </div>
-            </div>
+            </form>
         </div>
     );
 }
