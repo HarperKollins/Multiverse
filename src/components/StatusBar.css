@@ -1,0 +1,94 @@
+/* ── Status Bar ── */
+.statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--statusbar-height);
+    padding: 0 var(--space-lg);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle);
+    font-size: 11px;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.statusbar-left,
+.statusbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.statusbar-center {
+    display: flex;
+    align-items: center;
+}
+
+.center-dots {
+    display: flex;
+    gap: 6px;
+}
+
+.dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.4;
+    transition: all var(--transition-fast);
+}
+
+.dot-active {
+    background: var(--accent-primary);
+    opacity: 1;
+    box-shadow: 0 0 6px var(--accent-primary);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.indicator-dot.online {
+    background: var(--status-online);
+    box-shadow: 0 0 6px var(--status-online);
+    animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.statusbar-divider {
+    width: 1px;
+    height: 14px;
+    background: var(--border-subtle);
+}
+
+.status-metric {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.metric-icon {
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+.privacy-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--status-warning);
+}
+
+.privacy-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-warning);
+}
