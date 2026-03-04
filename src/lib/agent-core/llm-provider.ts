@@ -1,5 +1,5 @@
 import { CreateMLCEngine } from '@mlc-ai/web-llm';
-import { Ollama } from 'ollama/browser'; // use the browser-compatible entry
+import { Ollama } from 'ollama/browser';
 
 export interface GenerateOptions {
     prompt: string;
@@ -12,6 +12,18 @@ export interface ILLMProvider {
     isLoaded: boolean;
     initialize(onProgress?: (text: string) => void): Promise<void>;
     generate(options: GenerateOptions): Promise<string>;
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Detection Utility
+// ---------------------------------------------------------------------------
+function isTauri(): boolean {
+    return typeof window !== 'undefined' && '__TAURI__' in window;
+}
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<T>(cmd, args);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +73,6 @@ export class WebLLMProvider implements ILLMProvider {
         messages.push({ role: 'user', content: options.prompt });
 
         if (options.onUpdate) {
-            // Streaming response
             let fullText = '';
             const chunks = await this.engine.chat.completions.create({
                 messages,
@@ -75,7 +86,6 @@ export class WebLLMProvider implements ILLMProvider {
             }
             return fullText;
         } else {
-            // Static response
             const reply = await this.engine.chat.completions.create({ messages });
             return reply.choices[0].message.content || '';
         }
@@ -84,30 +94,51 @@ export class WebLLMProvider implements ILLMProvider {
 
 // ---------------------------------------------------------------------------
 // 2. Ollama Provider (Local desktop host)
+//    Uses Tauri Rust proxy when in Tauri environment to bypass CORS.
+//    Falls back to direct browser fetch when running as web app.
 // ---------------------------------------------------------------------------
 export class OllamaProvider implements ILLMProvider {
     name = 'Ollama (Localhost)';
-    isLoaded = true; // Doesn't need massive client-side loading
+    isLoaded = true;
     private ollama: Ollama;
     private modelName: string;
+    private host: string;
+    private useTauriProxy: boolean;
 
     constructor(modelName: string = 'llama3', host = 'http://localhost:11434') {
         this.modelName = modelName;
+        this.host = host;
+        this.useTauriProxy = isTauri();
         this.ollama = new Ollama({ host });
     }
 
     async initialize(onProgress?: (text: string) => void): Promise<void> {
-        if (onProgress) onProgress(`Connecting to Ollama at http://localhost:11434...`);
+        if (onProgress) onProgress(`Connecting to Ollama at ${this.host}...`);
+
         try {
-            // Just verifying model exists
-            const list = await this.ollama.list();
-            if (!list.models.some((m: any) => m.name.includes(this.modelName))) {
-                if (onProgress) onProgress(`Warning: Model ${this.modelName} not found locally. You may need to run 'ollama run ${this.modelName}'`);
+            if (this.useTauriProxy) {
+                // Use Tauri Rust proxy — no CORS issues
+                if (onProgress) onProgress('Using Tauri proxy for Ollama (CORS-free)...');
+                const models = await tauriInvoke<string[]>('ollama_list_models', { host: this.host });
+
+                if (!models.some((m: string) => m.includes(this.modelName))) {
+                    if (onProgress) onProgress(`Warning: Model "${this.modelName}" not found. Available: ${models.join(', ')}. Run 'ollama pull ${this.modelName}' to download.`);
+                } else {
+                    if (onProgress) onProgress(`Ollama connected via Tauri proxy. Active model: ${this.modelName}`);
+                }
             } else {
-                if (onProgress) onProgress(`Ollama connected. Active model: ${this.modelName}`);
+                // Direct browser fetch (requires OLLAMA_ORIGINS=* on Ollama side)
+                const list = await this.ollama.list();
+                if (!list.models.some((m: any) => m.name.includes(this.modelName))) {
+                    if (onProgress) onProgress(`Warning: Model ${this.modelName} not found locally. Run 'ollama pull ${this.modelName}'.`);
+                } else {
+                    if (onProgress) onProgress(`Ollama connected (direct). Active model: ${this.modelName}`);
+                }
             }
-        } catch (error) {
-            const msg = 'Failed to connect to Ollama. Ensure the Ollama app is running locally.';
+        } catch (error: any) {
+            const msg = this.useTauriProxy
+                ? `Failed to connect to Ollama via Tauri proxy. Ensure Ollama is running. Error: ${error.message || error}`
+                : 'Failed to connect to Ollama. Ensure the Ollama app is running and OLLAMA_ORIGINS=* is set.';
             console.error(msg, error);
             if (onProgress) onProgress(msg);
             throw new Error(msg);
@@ -121,6 +152,23 @@ export class OllamaProvider implements ILLMProvider {
         }
         messages.push({ role: 'user', content: options.prompt });
 
+        if (this.useTauriProxy) {
+            // Use Tauri Rust backend — completely bypasses CORS
+            const response = await tauriInvoke<{ content: string }>('ollama_chat', {
+                request: {
+                    model: this.modelName,
+                    messages,
+                    host: this.host,
+                },
+            });
+
+            if (options.onUpdate) {
+                options.onUpdate(response.content);
+            }
+            return response.content;
+        }
+
+        // Direct browser fallback
         if (options.onUpdate) {
             const response = await this.ollama.chat({
                 model: this.modelName,
@@ -194,8 +242,6 @@ export class APIProvider implements ILLMProvider {
         }
 
         if (options.onUpdate) {
-            // Streaming not fully implemented for API side perfectly in this snippet to save complexity,
-            // standard HTTP stream chunking for now:
             const reader = res.body?.getReader();
             const decoder = new TextDecoder("utf-8");
             let fullText = '';
