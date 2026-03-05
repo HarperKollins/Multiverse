@@ -104,7 +104,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
             const agentMsgId = `agent-${Date.now()}`;
             let streamedResponse = '';
 
-            const fullResponse = await runtime.ask(query, (text) => {
+            const result = await runtime.ask(query, (text) => {
                 streamedResponse = text;
                 setMessages((prev) => {
                     const existing = prev.find(m => m.id === agentMsgId);
@@ -113,7 +113,7 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
                     } else {
                         return [...prev, {
                             id: agentMsgId,
-                            role: 'agent',
+                            role: 'agent' as const,
                             content: text,
                             timestamp: Date.now()
                         }];
@@ -124,8 +124,8 @@ export default function AgentSidebar({ isOpen, onToggle }: Props) {
             if (!streamedResponse) {
                 setMessages((prev) => [...prev, {
                     id: agentMsgId,
-                    role: 'agent',
-                    content: fullResponse,
+                    role: 'agent' as const,
+                    content: result.response,
                     timestamp: Date.now(),
                 }]);
             }

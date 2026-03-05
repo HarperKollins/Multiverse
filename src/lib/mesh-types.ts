@@ -1,5 +1,5 @@
 // ── Multiverse Mesh Types ──
-// Protocol types for all mesh communication (local + cross-network)
+// Protocol types for mesh communication. Backward-compatible with existing peer-manager.
 
 export interface PeerInfo {
     peerId: string;
@@ -9,8 +9,8 @@ export interface PeerInfo {
     trustScore: number;
     isOnline: boolean;
     lastSeen: number;
-    publicKey?: string;        // Ed25519 public key (hex)
-    transport: 'local' | 'webrtc' | 'both';  // How we're connected
+    publicKey?: string;
+    transport?: 'local' | 'webrtc' | 'both';
 }
 
 // ── Message Types ──
@@ -18,79 +18,30 @@ export interface PeerInfo {
 export type MeshMessageType =
     | 'PING' | 'PONG'
     | 'ANNOUNCE'
-    | 'QUERY' | 'ANSWER'
+    | 'ASK' | 'ANSWER'
     | 'SHARE'
-    | 'TRUST_VOTE';
+    | 'TRUST_VOTE'
+    // New aliases (for WebRTC transport compatibility)
+    | 'QUERY';
 
 export interface MeshMessage {
     type: MeshMessageType;
-    fromPeerId: string;
-    fromPeerName: string;
+    // Old peer-manager uses senderId/senderName
+    senderId?: string;
+    senderName?: string;
+    // New WebRTC transport uses fromPeerId/fromPeerName
+    fromPeerId?: string;
+    fromPeerName?: string;
+    // Shared
+    id?: string;
     timestamp: number;
-    signature?: string;        // Ed25519 signature (hex)
+    signature?: string;
     payload: MeshPayload;
 }
 
-// ── Payloads ──
+// ── Payloads (flexible: supports both old {type} and new {kind} discriminators) ──
 
-export type MeshPayload =
-    | PingPayload
-    | PongPayload
-    | AnnouncePayload
-    | QueryPayload
-    | AnswerPayload
-    | SharePayload
-    | TrustVotePayload;
-
-export interface PingPayload {
-    kind: 'ping';
-}
-
-export interface PongPayload {
-    kind: 'pong';
-    knowledgeCount: number;
-}
-
-export interface AnnouncePayload {
-    kind: 'announce';
-    capabilities: string[];
-    knowledgeCount: number;
-    publicKey?: string;
-}
-
-export interface QueryPayload {
-    kind: 'query';
-    queryId: string;
-    question: string;
-    requiredCapabilities?: string[];
-}
-
-export interface AnswerPayload {
-    kind: 'answer';
-    queryId: string;
-    answer: string;
-    confidence: number;
-    sources: string[];
-}
-
-export interface SharePayload {
-    kind: 'share';
-    entries: Array<{
-        title: string;
-        content: string;
-        sourceUrl?: string;
-        trustScore: number;
-        tags?: string[];
-    }>;
-}
-
-export interface TrustVotePayload {
-    kind: 'trust_vote';
-    targetPeerId: string;
-    knowledgeId: string;
-    vote: 'confirm' | 'dispute';
-    reason?: string;
-}
+export type MeshPayload = Record<string, any>;
 
 // ── Events for UI ──
 
@@ -111,6 +62,7 @@ export interface MeshState {
     localPeerName: string;
     peers: PeerInfo[];
     events: MeshEvent[];
+    answers: MeshAnswer[];
     // Transport info
     localTransport: 'broadcast' | 'webrtc' | 'both';
     signalingConnected: boolean;
@@ -124,6 +76,7 @@ export interface MeshAnswer {
     peerId: string;
     peerName: string;
     answer: string;
-    confidence: number;
+    confidence?: number;
+    sources?: string[];
     receivedAt: number;
 }

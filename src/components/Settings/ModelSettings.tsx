@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { runtime, ProviderType } from '../../lib/agent-core/runtime';
+import { runtime } from '../../lib/agent-core/runtime';
 import './ModelSettings.css';
+
+type ProviderType = 'webgpu' | 'ollama' | 'api';
 
 interface ModelSettingsProps {
     isOpen: boolean;
@@ -8,10 +10,11 @@ interface ModelSettingsProps {
 }
 
 export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
-    const [providerType, setProviderType] = useState<ProviderType>(runtime.getProviderType());
+    const [providerType, setProviderType] = useState<ProviderType>('ollama');
     const [apiKey, setApiKey] = useState(localStorage.getItem('MV_API_KEY') || '');
     const [webgpuModelName, setWebgpuModelName] = useState(localStorage.getItem('MV_WEBGPU_MODEL') || 'gemma-2b-it-q4f16_1-MLC');
     const [ollamaModelName, setOllamaModelName] = useState(localStorage.getItem('MV_OLLAMA_MODEL') || 'llama3');
+    const [ollamaHost, setOllamaHost] = useState(localStorage.getItem('MV_OLLAMA_HOST') || 'http://localhost:11434');
     const [searchProvider, setSearchProvider] = useState(localStorage.getItem('MV_SEARCH_PROVIDER') || 'duckduckgo');
     const [searchKey, setSearchKey] = useState(localStorage.getItem('MV_SEARCH_API_KEY') || '');
     const [searchCx, setSearchCx] = useState(localStorage.getItem('MV_SEARCH_CX') || '');
@@ -20,7 +23,9 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
 
     useEffect(() => {
         if (isOpen) {
-            setProviderType(runtime.getProviderType());
+            // Load saved provider type
+            const saved = localStorage.getItem('MV_PROVIDER_TYPE') as ProviderType | null;
+            if (saved) setProviderType(saved);
         }
     }, [isOpen]);
 
@@ -30,6 +35,8 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
         setIsLoading(true);
         setStatus('Initializing provider...');
         try {
+            // Save all settings
+            localStorage.setItem('MV_PROVIDER_TYPE', providerType);
             if (providerType === 'api') {
                 localStorage.setItem('MV_API_KEY', apiKey);
             }
@@ -37,13 +44,27 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
             localStorage.setItem('MV_SEARCH_CX', searchCx);
             localStorage.setItem('MV_SEARCH_PROVIDER', searchProvider);
             localStorage.setItem('MV_OLLAMA_MODEL', ollamaModelName);
+            localStorage.setItem('MV_OLLAMA_HOST', ollamaHost);
             localStorage.setItem('MV_WEBGPU_MODEL', webgpuModelName);
-            // Ask runtime to configure and connect
-            const selectedModelName = providerType === 'ollama' ? ollamaModelName : (providerType === 'webgpu' ? webgpuModelName : undefined);
 
-            await runtime.setProvider(providerType, { apiKey, modelName: selectedModelName }, (msg: string) => {
-                setStatus(msg);
-            });
+            // Configure runtime with new API
+            const selectedModelName = providerType === 'ollama'
+                ? ollamaModelName
+                : (providerType === 'webgpu' ? webgpuModelName : undefined);
+
+            await runtime.setProvider(
+                {
+                    providerType,
+                    apiKey,
+                    modelName: selectedModelName,
+                    ollamaHost,
+                },
+                (msg: string) => setStatus(msg)
+            );
+
+            // Also refresh search provider
+            runtime.refreshSearch();
+
             setTimeout(() => {
                 onClose();
                 setStatus('');
@@ -104,8 +125,18 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
                                     disabled={isLoading}
                                 />
                             </div>
+                            <div className="form-group">
+                                <label>Ollama Host</label>
+                                <input
+                                    type="text"
+                                    value={ollamaHost}
+                                    onChange={(e) => setOllamaHost(e.target.value)}
+                                    placeholder="http://localhost:11434"
+                                    disabled={isLoading}
+                                />
+                            </div>
                             <div className="info-box">
-                                Assumes Ollama is running internally on <code>http://localhost:11434</code>. Make sure you have pulled the model specified above.
+                                Ensure Ollama is running. In Tauri mode, requests are proxied through Rust (no CORS issues). In browser mode, set <code>OLLAMA_ORIGINS=*</code>.
                             </div>
                         </>
                     )}
@@ -141,6 +172,8 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
                             disabled={isLoading}
                         >
                             <option value="duckduckgo">DuckDuckGo (Free HTML Scraper)</option>
+                            <option value="searxng">SearXNG (Self-Hosted Meta Search)</option>
+                            <option value="brave">Brave Search (2000 free/month)</option>
                             <option value="google">Google Custom Search API</option>
                         </select>
                     </div>

@@ -54,6 +54,10 @@ class AgentRuntime {
         }
     }
 
+    isReady(): boolean {
+        return this.provider !== null;
+    }
+
     async ask(
         query: string,
         onUpdate?: (text: string) => void
@@ -62,10 +66,10 @@ class AgentRuntime {
         const knowledgeResults = searchKnowledge(query);
 
         if (knowledgeResults.length > 0 && knowledgeResults[0].score > 0.25) {
-            const localResponse = generateAgentResponse(query, knowledgeResults);
-            if (localResponse && localResponse.length > 50) {
-                if (onUpdate) onUpdate(localResponse);
-                return { response: localResponse, source: 'local' };
+            const localResult = generateAgentResponse(query);
+            if (localResult.response && localResult.response.length > 50) {
+                if (onUpdate) onUpdate(localResult.response);
+                return { response: localResult.response, source: 'local' };
             }
         }
 
@@ -131,9 +135,9 @@ class AgentRuntime {
         }
 
         if (knowledgeResults.length > 0) {
-            const fallbackResponse = generateAgentResponse(query, knowledgeResults);
-            if (onUpdate) onUpdate(fallbackResponse);
-            return { response: fallbackResponse, source: 'local' };
+            const localFallback = generateAgentResponse(query);
+            if (onUpdate) onUpdate(localFallback.response);
+            return { response: localFallback.response, source: 'local' };
         }
 
         const noProviderMsg = 'No LLM provider connected and no relevant results found. Open Settings (⚙️) to connect Ollama, WebGPU, or an API provider.';

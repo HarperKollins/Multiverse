@@ -108,6 +108,9 @@ class PeerManager {
             events: this.events.slice(-50),
             answers: this.answers,
             isOnline: this.isOnline,
+            localTransport: 'broadcast' as const,
+            signalingConnected: false,
+            webrtcPeerCount: 0,
         };
     }
 
