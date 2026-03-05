@@ -1,159 +1,267 @@
-import { addKnowledge } from '../database';
+// ── Multiverse Search Providers ──
+// Multiple search providers: SearXNG (self-hosted meta), Brave, DuckDuckGo, Google
+// SearXNG is preferred: 243 engines, JSON API, no scraping, privacy-focused.
 
-export interface SearchResultItem {
-    title: string;
-    snippet: string;
-    url: string;
-}
+import { addKnowledge } from '../database';
+import type { WebSearchResult } from '../types';
 
 export interface ISearchProvider {
-    search(query: string, maxResults?: number): Promise<SearchResultItem[]>;
+    name: string;
+    search(query: string): Promise<WebSearchResult[]>;
 }
 
 // ---------------------------------------------------------------------------
-// 1. Google Custom Search Provider
+// 1. SearXNG Provider (self-hosted meta-search, always try first)
+//    Aggregates 243 search engines. JSON API. No API key needed.
+//    User can run via: docker run -p 8888:8080 searxng/searxng 
 // ---------------------------------------------------------------------------
-export class GoogleSearchProvider implements ISearchProvider {
-    private apiKey: string;
-    private searchEngineId: string;
+export class SearXNGSearchProvider implements ISearchProvider {
+    name = 'SearXNG';
+    private host: string;
 
-    constructor(apiKey: string, searchEngineId: string) {
-        this.apiKey = apiKey;
-        this.searchEngineId = searchEngineId;
+    constructor(host = 'http://localhost:8888') {
+        this.host = host;
     }
 
-    async search(query: string, maxResults = 3): Promise<SearchResultItem[]> {
-        if (!this.apiKey || !this.searchEngineId) {
-            throw new Error('Google Search API Key or Search Engine ID is missing.');
-        }
-
-        const url = `https://www.googleapis.com/customsearch/v1?key=${this.apiKey}&cx=${this.searchEngineId}&q=${encodeURIComponent(query)}&num=${maxResults}`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`Google Search API Error: ${response.status} - ${errBody}`);
-        }
-
-        const data = await response.json();
-        if (!data.items) {
-            return []; // No results found
-        }
-
-        return data.items.map((item: any) => ({
-            title: item.title,
-            snippet: item.snippet,
-            url: item.link
-        }));
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 2. DuckDuckGo Search Provider (Free HTML Scraper via CORS proxy)
-// ---------------------------------------------------------------------------
-export class DuckDuckGoSearchProvider implements ISearchProvider {
-    async search(query: string, maxResults = 3): Promise<SearchResultItem[]> {
-        // We use allorigins as a free public CORS proxy since browser fetch blocks direct DDG HTML access
-        const targetUrl = encodeURIComponent(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
-        const proxyUrl = `https://api.allorigins.win/get?url=${targetUrl}`;
-
+    async search(query: string): Promise<WebSearchResult[]> {
         try {
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error('Proxy fetch failed');
+            const url = `${this.host}/search?q=${encodeURIComponent(query)}&format=json&categories=general`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`SearXNG error: ${response.status}`);
 
             const data = await response.json();
-            const html = data.contents;
-            if (!html) return [];
-
-            // Naive Regex HTML parsing since we can't reliably DOMParse without throwing errors on some payloads
-            // DuckDuckGo HTML has <a class="result__url" href="..."> and <a class="result__snippet" ...>
-            const results: SearchResultItem[] = [];
-            const resultBlocks = html.split('class="result__body"');
-
-            for (let i = 1; i < resultBlocks.length && results.length < maxResults; i++) {
-                const block = resultBlocks[i];
-
-                // Extract URL
-                const urlMatch = block.match(/href="([^"]+)"/);
-                const url = urlMatch ? urlMatch[1] : '';
-
-                // Extract Title
-                const titleMatch = block.match(/<h2 class="result__title">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
-                const titleText = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Search Result';
-
-                // Extract Snippet
-                const snippetMatch = block.match(/class="result__snippet[^>]*>([\s\S]*?)<\/a>/);
-                const snippetText = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-
-                if (url && !url.includes('duckduckgo.com')) {
-                    // Clean up URL parsing since DDG wraps URLs in /url?q=...
-                    let cleanUrl = url;
-                    if (cleanUrl.startsWith('//duckduckgo.com/l/?uddg=')) {
-                        try {
-                            cleanUrl = decodeURIComponent(cleanUrl.split('uddg=')[1].split('&')[0]);
-                        } catch (e) { }
-                    }
-
-                    results.push({
-                        title: titleText,
-                        snippet: snippetText,
-                        url: cleanUrl
-                    });
-                }
-            }
-
-            return results;
+            return (data.results || []).slice(0, 8).map((r: any) => ({
+                title: r.title || '',
+                url: r.url || '',
+                snippet: r.content || '',
+                source: 'searxng',
+            }));
         } catch (error) {
-            console.error('DuckDuckGo search error:', error);
+            console.warn('[SearXNG] Not available:', error);
             return [];
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// HTML Scraper Utility (Fetch -> DOMParser -> Text)
+// 2. Brave Search API (2000 free queries/month, no CC required)
 // ---------------------------------------------------------------------------
-export async function scrapeAndIngest(item: SearchResultItem): Promise<boolean> {
-    try {
-        // Basic proxy workaround for CORS if needed, but assuming a Tauri backend / standard fetch can handle it or we use a public proxy for demo
-        // For production in Tauri, we would use the Rust backend to fetch avoiding CORS.
-        // As an MVP browser app, we fetch directly (might hit CORS depending on target server).
+export class BraveSearchProvider implements ISearchProvider {
+    name = 'Brave Search';
+    private apiKey: string;
 
-        // Since we are running in browser environment, direct fetch to arbitrary URLs usually fails due to CORS.
-        // We will fallback to injecting the snippet if full fetch fails.
-        let fullText = item.snippet;
+    constructor(apiKey: string) {
+        this.apiKey = apiKey;
+    }
+
+    async search(query: string): Promise<WebSearchResult[]> {
+        if (!this.apiKey) return [];
 
         try {
-            // Attempt full fetch (Will likely fail in pure web browser without proxy, but Tauri webviews can sometimes bypass or we build a rust command)
-            const res = await fetch(item.url, { mode: 'cors' });
-            if (res.ok) {
-                const html = await res.text();
-                // Extremely naive HTML to text parsing (Removes tags)
-                fullText = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<[^>]+>/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim()
-                    .substring(0, 3000); // Limit to 3000 chars to save LLM context
+            const response = await fetch(
+                `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`,
+                {
+                    headers: { 'X-Subscription-Token': this.apiKey },
+                }
+            );
+            if (!response.ok) throw new Error(`Brave error: ${response.status}`);
+
+            const data = await response.json();
+            return (data.web?.results || []).slice(0, 8).map((r: any) => ({
+                title: r.title || '',
+                url: r.url || '',
+                snippet: r.description || '',
+                source: 'brave',
+            }));
+        } catch (error) {
+            console.warn('[BraveSearch] Error:', error);
+            return [];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Google Custom Search (100 free/day)
+// ---------------------------------------------------------------------------
+export class GoogleSearchProvider implements ISearchProvider {
+    name = 'Google Search';
+    private apiKey: string;
+    private cseId: string;
+
+    constructor(apiKey: string, cseId: string) {
+        this.apiKey = apiKey;
+        this.cseId = cseId;
+    }
+
+    async search(query: string): Promise<WebSearchResult[]> {
+        if (!this.apiKey || !this.cseId) return [];
+
+        try {
+            const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${this.apiKey}&cx=${this.cseId}&num=5`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Google error: ${response.status}`);
+
+            const data = await response.json();
+            return (data.items || []).map((item: any) => ({
+                title: item.title || '',
+                url: item.link || '',
+                snippet: item.snippet || '',
+                source: 'google',
+            }));
+        } catch (error) {
+            console.warn('[GoogleSearch] Error:', error);
+            return [];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4. DuckDuckGo HTML Scraper (free, no key, but fragile)
+// ---------------------------------------------------------------------------
+export class DuckDuckGoSearchProvider implements ISearchProvider {
+    name = 'DuckDuckGo';
+
+    async search(query: string): Promise<WebSearchResult[]> {
+        try {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
+                `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+            )}`;
+
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error(`DDG proxy error: ${response.status}`);
+            const html = await response.text();
+
+            const results: WebSearchResult[] = [];
+            const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+            const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
+
+            const links = [...html.matchAll(linkRegex)];
+            const snippets = [...html.matchAll(snippetRegex)];
+
+            for (let i = 0; i < Math.min(links.length, 5); i++) {
+                const rawUrl = links[i][1];
+                const decodedUrl = decodeURIComponent(
+                    rawUrl.replace(/.*uddg=/, '').replace(/&.*/, '')
+                );
+                results.push({
+                    title: links[i][2].replace(/<[^>]*>/g, ''),
+                    url: decodedUrl,
+                    snippet: snippets[i]
+                        ? snippets[i][1].replace(/<[^>]*>/g, '').replace(/&amp;/g, '&')
+                        : '',
+                    source: 'duckduckgo',
+                });
             }
-        } catch (e) {
-            // CORS or network error, fallback to snippet
-            console.warn(`Could not scrape full HTML for ${item.url} (likely CORS). Falling back to snippet.`, e);
+
+            return results;
+        } catch (error) {
+            console.warn('[DDG] Scraper failed:', error);
+            return [];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cascading Search: tries providers in order, returns first success
+// ---------------------------------------------------------------------------
+export class CascadingSearchProvider implements ISearchProvider {
+    name = 'Cascading Search';
+    private providers: ISearchProvider[];
+
+    constructor(providers: ISearchProvider[]) {
+        this.providers = providers;
+    }
+
+    async search(query: string): Promise<WebSearchResult[]> {
+        for (const provider of this.providers) {
+            try {
+                const results = await provider.search(query);
+                if (results.length > 0) {
+                    console.log(`[Search] ${provider.name} returned ${results.length} results`);
+                    return results;
+                }
+            } catch (error) {
+                console.warn(`[Search] ${provider.name} failed, trying next...`);
+            }
+        }
+        return [];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scrape & Ingest: fetch full page content and add to knowledge base
+// ---------------------------------------------------------------------------
+export async function scrapeAndIngest(url: string): Promise<string> {
+    try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+
+        const html = await res.text();
+
+        // Strip HTML to plain text
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        // Remove script, style, nav elements
+        doc.querySelectorAll('script, style, nav, footer, header, aside').forEach(el => el.remove());
+
+        const text = doc.body?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const title = doc.querySelector('title')?.textContent?.trim() || url;
+
+        if (text.length > 100) {
+            // Truncate to reasonable size
+            const content = text.slice(0, 4000);
+
+            await addKnowledge({
+                title,
+                content,
+                sourceUrl: url,
+                sourceType: 'page',
+                tags: extractTags(content),
+                trustScore: 0.6,
+            });
+
+            return content;
         }
 
-        // Ingest into local knowledge DB
-        addKnowledge({
-            title: item.title,
-            content: fullText,
-            sourceUrl: item.url,
-            sourceType: 'search',
-            tags: ['web-search-fallback'],
-            trustScore: 0.8 // Search results should have decent baseline trust, but maybe lower than explicit user bookmarks
-        });
-
-        return true;
-    } catch (e) {
-        console.error('Failed to scrape and ingest', e);
-        return false;
+        return text;
+    } catch (error) {
+        console.warn('[Scrape] Failed:', error);
+        return '';
     }
+}
+
+// Simple tag extraction from content
+function extractTags(text: string): string[] {
+    const words = text.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+    const freq: Record<string, number> = {};
+    for (const word of words) {
+        freq[word] = (freq[word] || 0) + 1;
+    }
+    return Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([word]) => word);
+}
+
+// ---------------------------------------------------------------------------
+// Default search provider factory
+// ---------------------------------------------------------------------------
+export function createDefaultSearchProvider(): CascadingSearchProvider {
+    const searxngHost = localStorage.getItem('mv_searxng_host') || 'http://localhost:8888';
+    const braveKey = localStorage.getItem('mv_brave_api_key') || '';
+    const googleKey = localStorage.getItem('mv_google_search_key') || '';
+    const googleCseId = localStorage.getItem('mv_google_cse_id') || '';
+
+    const providers: ISearchProvider[] = [
+        new SearXNGSearchProvider(searxngHost),
+    ];
+
+    if (braveKey) providers.push(new BraveSearchProvider(braveKey));
+    if (googleKey && googleCseId) providers.push(new GoogleSearchProvider(googleKey, googleCseId));
+
+    // Always include DDG as last resort
+    providers.push(new DuckDuckGoSearchProvider());
+
+    return new CascadingSearchProvider(providers);
 }

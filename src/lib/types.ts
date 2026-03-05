@@ -11,6 +11,10 @@ export interface KnowledgeEntry {
     peerId?: string;
     createdAt: number;
     accessedAt: number;
+    // Anti-poisoning fields (Phase 2)
+    confirmationCount?: number;  // How many independent sources confirmed this
+    confidence?: number;         // Computed confidence score
+    sourcePeerId?: string;       // Which peer provided this knowledge
 }
 
 export interface HistoryEntry {
@@ -26,12 +30,21 @@ export interface SearchResult {
     matchedTerms: string[];
 }
 
+// Web search result from external providers
+export interface WebSearchResult {
+    title: string;
+    url: string;
+    snippet: string;
+    source: string;  // 'searxng' | 'duckduckgo' | 'google' | 'brave'
+}
+
 export interface AgentMessage {
     id: string;
     role: 'user' | 'agent' | 'system' | 'peer';
     content: string;
     timestamp: number;
     knowledgeResults?: SearchResult[];
+    webResults?: WebSearchResult[];
     peerName?: string;
     isThinking?: boolean;
 }

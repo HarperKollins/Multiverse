@@ -1,109 +1,158 @@
-import { ILLMProvider, WebLLMProvider, OllamaProvider, APIProvider } from './llm-provider';
-import { searchKnowledge } from '../knowledge';
-import { GoogleSearchProvider, DuckDuckGoSearchProvider, scrapeAndIngest } from './search-provider';
+// ── Jupiter Agent Runtime ──
+// Implements the Intelligence Gradient:
+// 1. Local Knowledge (TF-IDF) → 2. Mesh Query → 3. Web Search → 4. LLM Generation
 
-export type ProviderType = 'webgpu' | 'ollama' | 'api';
+import type { ILLMProvider } from './llm-provider';
+import { WebLLMProvider, OllamaProvider, APIProvider } from './llm-provider';
+import { createDefaultSearchProvider, scrapeAndIngest } from './search-provider';
+import type { CascadingSearchProvider } from './search-provider';
+import { searchKnowledge, generateAgentResponse } from '../knowledge';
+import type { WebSearchResult } from '../types';
+
+interface RuntimeConfig {
+    providerType: 'webgpu' | 'ollama' | 'api';
+    modelName?: string;
+    apiKey?: string;
+    ollamaHost?: string;
+}
+
+interface AskResult {
+    response: string;
+    source: 'local' | 'web' | 'llm' | 'fallback';
+    webResults?: WebSearchResult[];
+}
 
 class AgentRuntime {
     private provider: ILLMProvider | null = null;
-    private currentProviderType: ProviderType = 'webgpu';
+    private searchProvider: CascadingSearchProvider;
 
     constructor() {
-        // Start uninitialized, wait for UI to pick or default
+        this.searchProvider = createDefaultSearchProvider();
     }
 
-    async setProvider(type: ProviderType, options: { apiKey?: string; modelName?: string }, onProgress?: (msg: string) => void) {
-        this.currentProviderType = type;
-
-        switch (type) {
+    async setProvider(config: RuntimeConfig, onProgress?: (text: string) => void): Promise<void> {
+        switch (config.providerType) {
             case 'webgpu':
-                this.provider = new WebLLMProvider(options.modelName || 'gemma-2b-it-q4f16_1-MLC');
+                this.provider = new WebLLMProvider(config.modelName || 'gemma-2b-it-q4f16_1-MLC');
                 break;
             case 'ollama':
-                this.provider = new OllamaProvider(options.modelName || 'llama3');
+                this.provider = new OllamaProvider(
+                    config.modelName || 'llama3',
+                    config.ollamaHost || 'http://localhost:11434'
+                );
                 break;
             case 'api':
-                this.provider = new APIProvider(options.apiKey || '');
+                this.provider = new APIProvider(config.apiKey || '');
                 break;
         }
 
-        if (this.provider) {
-            await this.provider.initialize(onProgress);
+        try {
+            await this.provider?.initialize(onProgress);
+        } catch (error: any) {
+            if (onProgress) onProgress(`Provider init failed: ${error.message}`);
+            console.error('[Runtime] Provider initialization failed:', error);
         }
     }
 
-    getProviderName(): string {
-        return this.provider?.name || 'Uninitialized';
-    }
+    async ask(
+        query: string,
+        onUpdate?: (text: string) => void
+    ): Promise<AskResult> {
+        // ── Tier 1: Local Knowledge (TF-IDF) ──
+        const knowledgeResults = searchKnowledge(query);
 
-    getProviderType(): ProviderType {
-        return this.currentProviderType;
-    }
-
-    isReady(): boolean {
-        return this.provider?.isLoaded || false;
-    }
-
-    async ask(query: string, onUpdate?: (text: string) => void): Promise<string> {
-        if (!this.provider || !this.provider.isLoaded) {
-            throw new Error('LLM Provider not initialized or loaded yet.');
-        }
-
-        // Step 1: CHECK LOCAL (The Intelligence Gradient)
-        const localResults = searchKnowledge(query, 3);
-        let context = '';
-        let foundEnough = false;
-
-        // Arbitrary threshold for "good enough" local knowledge
-        if (localResults.length > 0 && localResults[0].score > 0.5) {
-            context = localResults.map(r => `Source: ${r.entry.title}\nContent: ${r.entry.content}`).join('\n\n');
-            foundEnough = true;
-        }
-
-        // Step 2: ASK MESH (Handled asynchronously by AgentSidebar/PeerManager)
-
-        // Step 3: FALLBACK TO WEB SEARCH
-        if (!foundEnough) {
-            try {
-                const searchType = localStorage.getItem('MV_SEARCH_PROVIDER') || 'duckduckgo';
-                let searchProvider = null;
-
-                if (searchType === 'google') {
-                    const searchKey = localStorage.getItem('MV_SEARCH_API_KEY');
-                    const searchCx = localStorage.getItem('MV_SEARCH_CX');
-                    if (searchKey && searchCx) {
-                        searchProvider = new GoogleSearchProvider(searchKey, searchCx);
-                    }
-                } else if (searchType === 'duckduckgo') {
-                    searchProvider = new DuckDuckGoSearchProvider();
-                }
-
-                if (searchProvider) {
-                    if (onUpdate) onUpdate('_Searching the web for answers..._');
-                    const webResults = await searchProvider.search(query, 2);
-
-                    if (webResults.length > 0) {
-                        if (onUpdate) onUpdate('_Reading webpages and learning..._');
-                        for (const res of webResults) {
-                            // Scrape and save to local DB permanently
-                            await scrapeAndIngest(res);
-                            context += `Source: ${res.title}\nContent: ${res.snippet}\n\n`; // Use snippet for quick LLM context
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('Web search fallback failed', e);
+        if (knowledgeResults.length > 0 && knowledgeResults[0].score > 0.25) {
+            const localResponse = generateAgentResponse(query, knowledgeResults);
+            if (localResponse && localResponse.length > 50) {
+                if (onUpdate) onUpdate(localResponse);
+                return { response: localResponse, source: 'local' };
             }
         }
 
-        // Step 2 & 3: Run through provider
-        return this.provider.generate({
-            prompt: query,
-            context: context || undefined,
-            onUpdate
-        });
+        // ── Tier 2: Web Search ──
+        let webResults: WebSearchResult[] = [];
+        let webContext = '';
+        try {
+            if (onUpdate) onUpdate('Searching the web...');
+            webResults = await this.searchProvider.search(query);
+
+            if (webResults.length > 0) {
+                webContext = webResults
+                    .map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`)
+                    .join('\n\n');
+
+                // Try to scrape top result for deeper context
+                try {
+                    const scraped = await scrapeAndIngest(webResults[0].url);
+                    if (scraped) {
+                        webContext = scraped.slice(0, 2000) + '\n\n---\n\n' + webContext;
+                    }
+                } catch {
+                    // Scraping is best-effort
+                }
+            }
+        } catch (error) {
+            console.warn('[Runtime] Web search failed:', error);
+        }
+
+        // ── Tier 3: LLM Generation ──
+        if (this.provider) {
+            try {
+                const context = [
+                    knowledgeResults.length > 0
+                        ? `Local knowledge:\n${knowledgeResults.map(r => `- ${r.entry.title}: ${r.entry.content.slice(0, 200)}`).join('\n')}`
+                        : '',
+                    webContext ? `Web search results:\n${webContext}` : '',
+                ].filter(Boolean).join('\n\n');
+
+                const response = await this.provider.generate({
+                    prompt: query,
+                    context: context || undefined,
+                    onUpdate,
+                });
+
+                return {
+                    response,
+                    source: webContext ? 'web' : 'llm',
+                    webResults: webResults.length > 0 ? webResults : undefined,
+                };
+            } catch (error: any) {
+                console.error('[Runtime] LLM generation failed:', error);
+            }
+        }
+
+        // ── Tier 4: Fallback ──
+        if (webResults.length > 0) {
+            const fallbackResponse = `Here's what I found from the web:\n\n${webResults.slice(0, 3).map((r, i) =>
+                `**${i + 1}. ${r.title}**\n${r.snippet}\n🔗 ${r.url}`
+            ).join('\n\n')}\n\n_Note: No LLM is connected. Connect Ollama or enable WebGPU in Settings for intelligent responses._`;
+            if (onUpdate) onUpdate(fallbackResponse);
+            return { response: fallbackResponse, source: 'web', webResults };
+        }
+
+        if (knowledgeResults.length > 0) {
+            const fallbackResponse = generateAgentResponse(query, knowledgeResults);
+            if (onUpdate) onUpdate(fallbackResponse);
+            return { response: fallbackResponse, source: 'local' };
+        }
+
+        const noProviderMsg = 'No LLM provider connected and no relevant results found. Open Settings (⚙️) to connect Ollama, WebGPU, or an API provider.';
+        if (onUpdate) onUpdate(noProviderMsg);
+        return { response: noProviderMsg, source: 'fallback' };
+    }
+
+    refreshSearch(): void {
+        this.searchProvider = createDefaultSearchProvider();
+    }
+
+    getProviderName(): string {
+        return this.provider?.name || 'None';
+    }
+
+    isProviderLoaded(): boolean {
+        return this.provider?.isLoaded || false;
     }
 }
 
-// Singleton for the browser shell to use
+// Singleton
 export const runtime = new AgentRuntime();
