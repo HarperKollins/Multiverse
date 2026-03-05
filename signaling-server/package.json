@@ -1,0 +1,14 @@
+{
+  "name": "multiverse-signaling",
+  "version": "1.0.0",
+  "description": "Multiverse WebSocket signaling server for P2P peer discovery",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

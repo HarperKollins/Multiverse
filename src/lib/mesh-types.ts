@@ -1,76 +1,129 @@
 // ── Multiverse Mesh Types ──
-// Protocol message types for P2P agent communication
+// Protocol types for all mesh communication (local + cross-network)
 
 export interface PeerInfo {
     peerId: string;
     displayName: string;
-    publicKey: string;
     capabilities: string[];
-    trustScore: number;
-    lastSeen: number;
-    isOnline: boolean;
     knowledgeCount: number;
-    ip?: string;
+    trustScore: number;
+    isOnline: boolean;
+    lastSeen: number;
+    publicKey?: string;        // Ed25519 public key (hex)
+    transport: 'local' | 'webrtc' | 'both';  // How we're connected
 }
 
+// ── Message Types ──
+
 export type MeshMessageType =
-    | 'PING'
-    | 'PONG'
+    | 'PING' | 'PONG'
     | 'ANNOUNCE'
-    | 'ASK'
-    | 'ANSWER'
+    | 'QUERY' | 'ANSWER'
     | 'SHARE'
     | 'TRUST_VOTE';
 
 export interface MeshMessage {
-    id: string;
     type: MeshMessageType;
-    senderId: string;
-    senderName: string;
+    fromPeerId: string;
+    fromPeerName: string;
     timestamp: number;
+    signature?: string;        // Ed25519 signature (hex)
     payload: MeshPayload;
-    hops: number;
-    maxHops: number;
 }
+
+// ── Payloads ──
 
 export type MeshPayload =
-    | { type: 'PING' }
-    | { type: 'PONG' }
-    | { type: 'ANNOUNCE'; capabilities: string[]; knowledgeCount: number }
-    | { type: 'ASK'; queryId: string; query: string }
-    | { type: 'ANSWER'; queryId: string; answer: string; sources: string[] }
-    | { type: 'SHARE'; entries: SharedKnowledge[] }
-    | { type: 'TRUST_VOTE'; targetPeerId: string; score: number };
+    | PingPayload
+    | PongPayload
+    | AnnouncePayload
+    | QueryPayload
+    | AnswerPayload
+    | SharePayload
+    | TrustVotePayload;
 
-export interface SharedKnowledge {
-    title: string;
-    content: string;
-    sourceUrl?: string;
-    tags: string[];
+export interface PingPayload {
+    kind: 'ping';
 }
+
+export interface PongPayload {
+    kind: 'pong';
+    knowledgeCount: number;
+}
+
+export interface AnnouncePayload {
+    kind: 'announce';
+    capabilities: string[];
+    knowledgeCount: number;
+    publicKey?: string;
+}
+
+export interface QueryPayload {
+    kind: 'query';
+    queryId: string;
+    question: string;
+    requiredCapabilities?: string[];
+}
+
+export interface AnswerPayload {
+    kind: 'answer';
+    queryId: string;
+    answer: string;
+    confidence: number;
+    sources: string[];
+}
+
+export interface SharePayload {
+    kind: 'share';
+    entries: Array<{
+        title: string;
+        content: string;
+        sourceUrl?: string;
+        trustScore: number;
+        tags?: string[];
+    }>;
+}
+
+export interface TrustVotePayload {
+    kind: 'trust_vote';
+    targetPeerId: string;
+    knowledgeId: string;
+    vote: 'confirm' | 'dispute';
+    reason?: string;
+}
+
+// ── Events for UI ──
 
 export interface MeshEvent {
     id: string;
     type: 'peer_joined' | 'peer_left' | 'knowledge_shared' | 'query_received' | 'query_answered';
-    peerId: string;
     peerName: string;
+    peerId: string;
     detail: string;
     timestamp: number;
 }
 
-export interface MeshAnswer {
-    queryId: string;
-    answer: string;
-    sources: string[];
-    peerId: string;
-    peerName: string;
-}
+// ── Global Mesh State ──
 
 export interface MeshState {
+    isOnline: boolean;
     localPeerId: string;
     localPeerName: string;
     peers: PeerInfo[];
     events: MeshEvent[];
-    answers: MeshAnswer[];
-    isOnline: boolean;
+    // Transport info
+    localTransport: 'broadcast' | 'webrtc' | 'both';
+    signalingConnected: boolean;
+    webrtcPeerCount: number;
+}
+
+// ── Mesh Answer (for UI display) ──
+
+export interface MeshAnswer {
+    queryId: string;
+    peerId: string;
+    peerName: string;
+    answer: string;
+    confidence: number;
+    receivedAt: number;
 }
