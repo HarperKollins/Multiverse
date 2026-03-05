@@ -1,147 +1,164 @@
 # Multiverse (Project Jupiter)
 
+> 🚧 **EARLY DEVELOPMENT — ACTIVE BUILD PHASE**
+>
+> ✅ Working: Jupiter agent sidebar • TF-IDF knowledge search • 3× LLM providers (WebGPU/Ollama/API) • Mesh gossip protocol • WebRTC cross-location P2P • Network topology visualizer • SearXNG/Brave/DDG cascading search
+>
+> 🔨 In Progress: Real-time dashboard metrics • Plugin ecosystem • CRDT knowledge sync
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-orange.svg)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-v19-61dafb.svg)](https://react.dev/)
 
-Multiverse is a decentralized, agent-first browser and knowledge engine workspace. Codenamed **Project Jupiter**, it is built on the philosophy of "middle-out compression" — building outward from the agent layer to both the browser UI and the decentralized mesh network simultaneously. 
-
-The core vision of Multiverse is to create a local-first web environment where AI agents are first-class citizens, participating in a peer-to-peer (P2P) internet to share knowledge, distribute compute, and guarantee absolute user privacy.
+Multiverse is a decentralized, agent-first browser and knowledge engine. Codenamed **Project Jupiter**, every instance is both a client and a server — there is no central authority. AI agents are first-class citizens, participating in a P2P mesh to share knowledge, distribute query resolution, and guarantee absolute user privacy.
 
 ---
 
-## 🏗️ Architectural Blueprint
+## 🏗️ Architecture
 
-The system is rigorously structured into five well-defined layers with clean boundaries. Each layer communicates exclusively with its immediate neighbors via typed interfaces, preventing architectural decay and ensuring horizontal scalability.
-
-```mermaid
-graph TD
-    classDef layer5 fill:#1E293B,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC
-    classDef layer4 fill:#312E81,stroke:#8B5CF6,stroke-width:2px,color:#F8FAFC
-    classDef layer3 fill:#064E3B,stroke:#10B981,stroke-width:2px,color:#F8FAFC
-    classDef layer2 fill:#78350F,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC
-    classDef layer1 fill:#450A0A,stroke:#EF4444,stroke-width:2px,color:#F8FAFC
-    classDef external fill:#000000,stroke:#64748B,stroke-dasharray: 5 5,color:#94A3B8
-
-    subgraph Layer5["Layer 5: Browser Shell"]
-        UI["Modern React/Tauri Desktop Shell"]:::layer5
-        SB["Jupiter Agent Sidebar UI"]:::layer5
-    end
-
-    subgraph Layer4["Layer 4: Agent Core ('Jupiter')"]
-        IR["Intent Router & Orchestrator"]:::layer4
-        TR["Tool Registry"]:::layer4
-        EE["Execution Engine (WebGPU/Ollama/API)"]:::layer4
-    end
-
-    subgraph Layer3["Layer 3: Mesh Layer"]
-        BC["Zero-Config BroadcastChannel Peer Topology"]:::layer3
-        GS["Agent Gossip Protocol"]:::layer3
-    end
-
-    subgraph Layer2["Layer 2: Data Layer"]
-        DB[("SQLite FTS5 (Local Knowledge Graph)")]:::layer2
-        VS[("Vector Store (Semantic Context)")]:::layer2
-    end
-
-    subgraph Layer1["Layer 1: Privacy Engine"]
-        PE["Absolute Local Data Sovereignty"]:::layer1
-    end
-
-    Peers["Other Connected Agents"]:::external
-
-    UI <--> SB
-    SB <--> IR
-    IR <--> TR
-    IR <--> EE
-    
-    IR <--> BC
-    BC <--> GS
-    GS <--> Peers
-    
-    TR <--> DB
-    TR <--> VS
-    
-    DB <--> PE
-    VS <--> PE
+```
+┌─────────────── Browser Shell (React/Tauri) ───────────────┐
+│  AgentSidebar • Dashboard • Topology • Settings • Plugins │
+├───────────────── Agent Core ("Jupiter") ──────────────────┤
+│  Intelligence Gradient • Tool Registry • LLM Providers    │
+├──────────────── Mesh Network (P2P) ───────────────────────┤
+│  BroadcastChannel (local) + WebRTC (cross-location)       │
+│  Signaling Server • STUN NAT traversal • Agent Protocol   │
+├───────────────── Data Layer ──────────────────────────────┤
+│  IndexedDB • TF-IDF Search • Anti-poisoning (trust/conf)  │
+├───────────────── Tauri Rust Backend ──────────────────────┤
+│  Ollama Proxy (CORS-free) • Ed25519 Identity • Crypto     │
+└───────────────────────────────────────────────────────────┘
 ```
 
-### 1. Privacy Engine (Layer 1)
-The foundational layer guaranteeing data sovereignty. All persistent memory and vector embeddings reside strictly on the user's local disk. No telemetry, no forced cloud synchronization. 
+> See [TECHNICAL_ARCHITECTURE.md](./TECHNICAL_ARCHITECTURE.md) for detailed data flows and design rationale.
 
-### 2. Data Layer (Layer 2)
-The structured memory engine powering the agents. 
-* **SQLite (FTS5):** Provides instant, full-text search capabilities over the user's ingested knowledge base via TF-IDF (Term Frequency-Inverse Document Frequency) scoring algorithms.
-* **Vector Store:** Planned implementation for semantic similarity search enabling deep context retrieval.
+---
 
-### 3. Mesh Layer (Layer 3)
-A resilient, decentralized communication protocol.
-* **Zero-Config Topology:** The MVP utilizes the `BroadcastChannel` API for instantaneous, zero-configuration P2P peer discovery and query routing across the local environment.
-* **Agent Gossip Protocol:** Allows isolated instances to broadcast queries to the mesh and asynchronously render remote cognitive responses inline.
+## 🧠 Intelligence Gradient
 
-### 4. Agent Core: "Jupiter" (Layer 4)
-The cognitive engine of the platform. Jupiter acts as an Intent Router, Tool Registry, and Memory Manager. It operates on a sophisticated **Intelligence Gradient** to resolve user queries with maximal efficiency and minimal latency:
-1. **Local Knowledge Retrieval (Tier 1):** Scans the local SQLite TF-IDF database for an immediate, 0ms latency match.
-2. **Mesh Network Query (Tier 2):** Broadcasts unresolved intents to connected peer nodes in the topology.
-3. **Web Search Fallback (Tier 3):** Dynamically falls back to web crawling. Features a bespoke DuckDuckGo proxy-scraper that extracts raw HTML, sanitizes it of DOM bloat, and permanently ingests the structured text into local memory.
-4. **Execution Engine (Tier 4):** Synthesizes the retrieved context relying on a dynamic, triple-fallback LLM provider system:
-   * **WebGPU (Local In-Browser):** Leverages WebLLM to run high-performance models (like *Gemma 2B IT*) natively in the browser via WebGPU, bypassing server costs and preserving privacy.
-   * **Ollama (Localhost):** Connects to discrete desktop daemon processes for configurable, heavyweight inference (e.g., *Llama 3*, *Mistral*).
-   * **Remote API (Cloud):** A traditional robust fallback connecting to OpenAI or Google structured endpoints.
+Jupiter resolves queries through a 4-tier fallback chain:
 
-### 5. Browser Shell (Layer 5)
-The presentation layer built on advanced desktop tech.
-* **Tauri (v2) & React (v19):** A highly performant, memory-safe Rust backend coupled with a reactive TypeScript frontend.
-* Features a dark, terminal-aesthetic UI, dynamic topology visualizers, and an integrated Agent Sidebar for real-time interaction and status monitoring.
+| Tier | Source | Latency | Privacy |
+|------|--------|---------|---------|
+| 1 | Local Knowledge (TF-IDF on IndexedDB) | ~1ms | 🟢 100% local |
+| 2 | Mesh Peers (BroadcastChannel + WebRTC) | ~50ms | 🟡 Peer sees query |
+| 3 | Web Search (SearXNG → Brave → DDG cascade) | ~500ms | 🟡 Search engine sees query |
+| 4 | LLM Generation (WebGPU / Ollama / API) | ~2-5s | 🟢 Local or 🔴 Cloud |
+
+---
+
+## 🌐 Cross-Location P2P
+
+**Two machines anywhere in the world can connect directly.** No central server relays data.
+
+- **Same WiFi:** Automatic via BroadcastChannel (tab-to-tab) 
+- **Different WiFi / Different Countries:** WebRTC via signaling server + STUN NAT traversal
+- **STUN servers used:** Google (`stun.l.google.com:19302`), Cloudflare (`stun.cloudflare.com:3478`) — free, no account
+
+```
+Node A (Lagos) ──WebSocket──→ Signaling Server ←──WebSocket── Node B (NYC)
+                           (handshake only, then:)
+Node A ────────────── WebRTC DataChannel (encrypted) ────────── Node B
+```
+
+To run the signaling server:
+```bash
+cd signaling-server && npm install && npm start
+```
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) v18+
 - [Rust](https://www.rust-lang.org/) (for Tauri builds)
-- A browser supporting **WebGPU** (Chrome 113+, Edge 113+). 
+- [Ollama](https://ollama.com/) (optional, for local LLM)
+- Browser with **WebGPU** support (Chrome 113+, Edge 113+)
 
 ### Installation
 
-1. **Clone the repository:**
-   \`\`\`bash
-   git clone https://github.com/HarperKollins/Multiverse.git
-   cd Multiverse/multiverse
-   \`\`\`
+```bash
+git clone https://github.com/HarperKollins/Multiverse.git
+cd Multiverse/multiverse
+npm install
+```
 
-2. **Install dependencies:**
-   \`\`\`bash
-   npm install
-   \`\`\`
+### Run (Web Dev Mode)
+```bash
+npm run dev
+```
 
-3. **Run the development server:**
-   \`\`\`bash
-   npm run dev
-   \`\`\`
-   *(Note: The vite config initializes with strict Cross-Origin Isolation headers required for WebGPU `SharedArrayBuffer` memory allocation.)*
+### Run (Tauri Desktop App)
+```bash
+npm run tauri dev
+```
+
+### Connect Ollama
+If using Ollama for local LLM, set the CORS environment variable:
+
+**Windows (PowerShell):**
+```powershell
+[System.Environment]::SetEnvironmentVariable("OLLAMA_ORIGINS", "*", "User")
+# Restart Ollama after setting
+```
+
+**macOS/Linux:**
+```bash
+export OLLAMA_ORIGINS="*"
+ollama serve
+```
 
 ---
 
 ## ⚙️ Configuration
 
-Multiverse is highly configurable via the **Jupiter Brain Settings** modal in the UI:
-1. Open the Agent Sidebar (Jupiter icon).
-2. Click the configuration gear.
-3. **Select Execution Engine:** Toggle smoothly between WebGPU, Ollama, and Remote APIs.
-4. **Configure Search:** Enter Google Custom Search API credentials or utilize the free DuckDuckGo HTML scraper.
+Open the Agent Sidebar → click ⚙️ Settings:
+
+| Setting | Options |
+|---------|---------|
+| LLM Provider | WebGPU (in-browser) · Ollama (local) · OpenAI API |
+| Search | SearXNG (self-hosted) · Brave (2000 free/mo) · DuckDuckGo · Google CSE |
+| Signaling Server | Default: `ws://localhost:9090` |
+
+---
+
+## 📂 Project Structure
+
+```
+multiverse/
+├── src/
+│   ├── components/        # React UI components
+│   ├── lib/
+│   │   ├── agent-core/    # LLM providers, search, runtime, tool registry
+│   │   ├── plugins/       # Plugin loader and API
+│   │   ├── database.ts    # IndexedDB persistent storage
+│   │   ├── knowledge.ts   # TF-IDF search engine
+│   │   ├── peer-manager.ts # BroadcastChannel mesh
+│   │   ├── webrtc-transport.ts # WebRTC cross-location P2P
+│   │   ├── mesh-types.ts  # Protocol type definitions
+│   │   └── logger.ts      # Structured logging & metrics
+│   └── App.tsx
+├── src-tauri/
+│   └── src/
+│       ├── lib.rs         # Ollama proxy + identity commands
+│       └── identity.rs    # Ed25519 node identity
+├── signaling-server/      # WebSocket peer discovery server
+├── docs/
+│   └── agent-protocol.md  # Agent communication protocol spec
+├── TECHNICAL_ARCHITECTURE.md
+├── VISION.md
+└── LICENSE                # MIT
+```
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions from researchers, engineers, and standard-bearers of the decentralized web. 
-
-### Guidelines:
-1. **Maintain Layer Boundaries:** Ensure that frontend React components do not directly mutate Layer 2 (Data) state without interacting via the Layer 4 (Agent Core) typed interfaces.
-2. **Testing:** New providers or tools added to the Agent Core must include comprehensive edge-case testing, particularly network instability fallbacks.
-3. **Process:** Please open an Issue outlining the architectural intent before submitting a Pull Request.
+1. **Maintain Layer Boundaries:** Frontend components should not directly access IndexedDB — go through the Agent Core.
+2. **Agent Protocol:** All mesh messages must follow the [Agent Protocol spec](./docs/agent-protocol.md).
+3. **Open an Issue first** before submitting a Pull Request.
 
 ---
 
